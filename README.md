@@ -1,259 +1,215 @@
-# Majoo Core Service Boilerplate (`maj-core-srvc`)
+# Simple Blog System REST API (`maj-core-srvc`)
 
-Boilerplate microservice **Golang** berstandar *production* untuk kebutuhan **RESTful API** (dan siap diperluas ke **Event-Driven**), dibangun dengan fokus pada performa tinggi, kemudahan pemeliharaan (*maintainability*), dan batas antar-layer yang tegas.
-
----
-
-## Tech Stack Utama
-
-- **Language**: Go `1.26+`
-- **HTTP Framework**: [Fiber v2](https://github.com/gofiber/fiber) (`fasthttp` engine)
-- **CLI & Command Runner**: [Cobra](https://github.com/spf13/cobra) (`http serve`, `event serve`, `migrate`)
-- **Database ORM & Pooling**: [GORM](https://gorm.io/) dengan dynamic driver (`postgres`, `mysql`, `sqlite`) di atas `database/sql` connection pool
-- **Database Migration**: [golang-migrate](https://github.com/golang-migrate/migrate)
-- **Validation**: [go-playground/validator v10](https://github.com/go-playground/validator)
-- **Authentication**: [golang-jwt v5](https://github.com/golang-jwt/jwt) (Bearer Token + RBAC) & Internal API Key (`X-API-Key`)
-- **API Documentation**: [Swaggo / OpenAPI 2.0](https://github.com/swaggo/swag) (`GET /swagger/index.html`)
-- **Logging**: Structured Context-Aware Logger berbasis `log/slog` (otomatis menginjeksi `request_id` & `user_id` di seluruh layer + GORM Slow Query Logger)
+Production-grade **Golang** microservice implementing a **Simple Blog System REST API** with JWT authentication, strict Anti-IDOR ownership authorization, posts & comments CRUD with soft-delete, standardized validation/error responses, per-table SQL migrations, database seeding, and atomic database transactions.
 
 ---
 
-## Struktur Direktori & Arsitektur (3-Tier Decoupled)
+## Table of Contents
 
-```text
-maj-core-srvc/
-├── migrations/                              # File SQL migrasi tunggal (.sql berisi -- +migrate Up & Down)
-├── src/
-│   ├── main.go                              # Entrypoint aplikasi & anotasi global Swagger
-│   ├── cmd/                                 # Definisi CLI Cobra
-│   │   ├── root.go                          # Inisialisasi Config, Logger, & Signal Handling
-│   │   ├── http.go                          # Command: `app http serve`
-│   │   ├── event.go                         # Command: `app event serve`
-│   │   └── migrate.go                       # Command: `app migrate [up|down|version|force|create]`
-│   ├── docs/                                # Generated OpenAPI/Swagger files (swag init)
-│   └── internal/
-│       ├── bootstrap/
-│       │   └── app.go                       # Dependency Injection wiring & Graceful Shutdown
-│       ├── config/
-│       │   └── config.go                    # Konfigurasi berbasis Environment Variables (.env)
-│       ├── infra/
-│       │   ├── database/
-│       │   │   ├── database.go              # Dynamic GORM connection & sql.DB Connection Pool
-│       │   │   └── gorm_logger.go           # Custom GORM logger terintegrasi slog + Slow Query detector
-│       │   └── logger/
-│       │       └── logger.go                # Context-aware slog (JSON/Text, Stdout/File)
-│       ├── middleware/
-│       │   ├── middleware.go                # Global middleware setup (RequestID, Recover, CORS)
-│       │   ├── logger.go                    # HTTP Access Logger & RequestID context propagation
-│       │   ├── error_handler.go             # Centralized Fiber ErrorHandler
-│       │   ├── auth.go                      # JWT Bearer Auth & Role-Based Access Control (RBAC)
-│       │   ├── api_key.go                   # Service-to-Service Auth (X-API-Key)
-│       │   └── rate_limiter.go              # IP-based Rate Limiter
-│       ├── router/
-│       │   └── http.go                      # Registrasi seluruh endpoint HTTP
-│       ├── handler/                         # Layer 1: HTTP Delivery (parse request, validate, return JSON)
-│       ├── service/                         # Layer 2: Business Logic (transport-agnostic)
-│       ├── repository/                      # Layer 3: Data Access (GORM queries)
-│       ├── model/                           # Entity Database murni (GORM structs, tanpa tag JSON)
-│       ├── dto/                             # Kontrak Data (terpisah tegas per tanggung jawab)
-│       │   ├── request/                     # Struct penerima HTTP Request (JSON body / Query params)
-│       │   ├── service/                     # Struct input/filter untuk Service Layer
-│       │   └── response/                    # Struct output JSON Response + Mapper dari Model
-│       └── pkg/
-│           ├── response/                    # Standar JSON Envelope, AppError, & Mapping Response Code
-│           └── validator/                   # Wrapper validator struct -> FieldError standar
-├── .env.example
-├── Dockerfile                               # Multi-stage Docker build (Alpine non-root)
-├── docker-compose.yml                       # Local development stack (PostgreSQL + App)
-└── Makefile                                 # Shortcut operasional & development
-```
-
-### Alur Data Antar-Layer
-
-Untuk mencegah *leaky abstraction* (skema tabel database bocor ke JSON API atau layer `service` bergantung pada HTTP), alur data dipisah secara ketat:
-
-```mermaid
-flowchart LR
-    Client["HTTP Client"] -->|JSON / Query| ReqDTO["dto/request"]
-    ReqDTO -->|.ToServiceInput()| SvcDTO["dto/service"]
-    SvcDTO --> Service["Service Layer"]
-    Service <-->|model.Entity| Repo["Repository Layer (GORM)"]
-    Service -->|ToResponse()| RespDTO["dto/response"]
-    RespDTO -->|response.Envelope| Client
-```
+1. [Setup and Running Instructions](#1-setup-and-running-instructions)
+2. [Architecture Explanation](#2-architecture-explanation)
+3. [Technology Choices Justification](#3-technology-choices-justification)
+4. [Known Limitations and Future Improvements](#4-known-limitations-and-future-improvements)
+5. [Test Coverage Report](#5-test-coverage-report)
 
 ---
 
-## Quick Start
+## 1. Setup and Running Instructions
 
-### 1. Persiapan Environment
-Salin file `.env.example` menjadi `.env`:
+### Prerequisites
+- **Go**: `1.26+`
+- **Database**: MySQL `8.0+` or PostgreSQL `15+` (or SQLite for in-memory testing)
+- **Make** (optional, for shortcut commands)
+
+### Step 1: Configure Environment Variables
+Copy `.env.example` to `.env` and adjust the database credentials to match your local setup:
 ```bash
 cp .env.example .env
 ```
 
 > **Dynamic Database Driver (`DB_DRIVER`)**:
-> Anda dapat mengubah `DB_DRIVER` di `.env` ke `postgres`, `mysql`, atau `sqlite`. Jika `DB_URL` dikosongkan, aplikasi akan merakit connection string secara otomatis dari variabel `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, dan `DB_NAME`.
+> You can set `DB_DRIVER` in `.env` to `mysql`, `postgres`, or `sqlite`. When `DB_URL` is left empty, the service automatically constructs the DSN from `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, and `DB_NAME`.
 
-### 2. Menjalankan Database (Docker Compose)
-```bash
-docker compose up -d postgres
-```
+### Step 2: Run Database Migrations
+Each table has its own dedicated migration file in `migrations/` containing both `-- +migrate Up` and `-- +migrate Down` sections:
+- `migrations/20260101000001_create_users_table.sql`
+- `migrations/20260101000002_create_posts_table.sql`
+- `migrations/20260101000003_create_comments_table.sql`
 
-### 3. Menjalankan Migrasi Database
 ```bash
-# Menjalankan semua migrasi pending
+# Apply all pending migrations
 make migrate-up
+# or: go run ./src migrate up
 
-# Mengecek versi migrasi saat ini
+# Check current migration version
 make migrate-version
 
-# Membuat 1 file migrasi .sql baru (berisi blok -- +migrate Up & -- +migrate Down)
-make migrate-create name=add_orders_table
-
-# Rollback 1 langkah migrasi
+# Rollback 1 migration step
 make migrate-down
+
+# Create a new single-file migration
+make migrate-create name=add_new_table
 ```
 
-### 4. Menjalankan Server
+### Step 3: Seed Initial Data (Optional)
+Populate `users`, `posts`, and `comments` with idempotent sample data wrapped inside a database transaction:
 ```bash
-# Menjalankan REST API Server
+make seed
+# or: go run ./src seed
+```
+
+Default seeded accounts (all use password `password123`):
+| Email | Name | Role |
+| :--- | :--- | :--- |
+| `admin@majoo.id` | Admin Majoo | `admin` |
+| `budi@majoo.id` | Budi Santoso | `user` |
+| `siti@majoo.id` | Siti Aminah | `user` |
+
+### Step 4: Start the HTTP Server
+```bash
 make run-http
-
-# Menjalankan Event Worker
-make run-event
+# or: go run ./src http serve
 ```
 
-Setelah server berjalan:
-- **Swagger UI**: `http://localhost:8080/swagger/index.html`
+Once the server is running:
+- **Swagger UI (Interactive API Docs)**: `http://localhost:8080/swagger/index.html`
 - **Liveness Probe**: `GET http://localhost:8080/healthz`
-- **Readiness & DB Pool Stats**: `GET http://localhost:8080/readyz`
+- **Readiness & DB Connection Pool Stats**: `GET http://localhost:8080/readyz`
 
-### Daftar Endpoint Simple Blog System (`/api/v1`)
+### API Endpoints Summary (`/api/v1`)
 
-| Method | Endpoint | Auth | Deskripsi |
+| Method | Endpoint | Auth | Description |
 | :---: | :--- | :---: | :--- |
-| `POST` | `/api/v1/auth/register` | Public | Registrasi user baru (`user` / `admin`) & dapatkan JWT token |
-| `POST` | `/api/v1/auth/login` | Public | Login dengan email & password untuk mendapatkan JWT token |
-| `GET` | `/api/v1/auth/me` | Bearer JWT | Ambil profil user yang sedang login |
-| `GET` | `/api/v1/posts` | Public | Daftar post dengan pagination, pencarian, & filter `author_id` |
-| `GET` | `/api/v1/posts/:id` | Public | Detail satu post beserta info author |
-| `POST` | `/api/v1/posts` | Bearer JWT | Buat post baru |
-| `PUT` | `/api/v1/posts/:id` | Bearer JWT | Update post (hanya pemilik post) |
-| `DELETE` | `/api/v1/posts/:id` | Bearer JWT | Hapus post + seluruh komentarnya dalam 1 transaksi DB (pemilik / `admin`) |
-| `GET` | `/api/v1/posts/:postId/comments` | Public | Daftar komentar pada sebuah post dengan pagination |
-| `POST` | `/api/v1/posts/:postId/comments` | Bearer JWT | Tambah komentar + increment `comments_count` dalam 1 transaksi DB |
-| `PUT` | `/api/v1/comments/:id` | Bearer JWT | Update isi komentar (hanya pembuat komentar) |
-| `DELETE` | `/api/v1/comments/:id` | Bearer JWT | Hapus komentar + decrement `comments_count` dalam 1 transaksi DB (pemilik / `admin`) |
+| `POST` | `/api/v1/auth/register` | Public | Register a new user account and receive a JWT access token |
+| `POST` | `/api/v1/auth/login` | Public | Authenticate with email & password to receive a JWT access token |
+| `GET` | `/api/v1/auth/me` | Bearer JWT | Get the authenticated user's profile |
+| `GET` | `/api/v1/posts` | Public | List posts with pagination (`page`, `per_page`), `search`, & `author_id` filter |
+| `GET` | `/api/v1/posts/:id` | Public | Get a single post by ID including author details |
+| `POST` | `/api/v1/posts` | Bearer JWT | Create a new blog post |
+| `PUT` | `/api/v1/posts/:id` | Bearer JWT | Update a post (**Owner only** — Anti-IDOR enforced) |
+| `DELETE` | `/api/v1/posts/:id` | Bearer JWT | Soft-delete a post & all its comments in **1 DB transaction** (**Owner only**) |
+| `GET` | `/api/v1/posts/:postId/comments` | Public | List comments for a post with pagination |
+| `POST` | `/api/v1/posts/:postId/comments` | Bearer JWT | Create a comment & increment `comments_count` in **1 DB transaction** |
+| `GET` | `/api/v1/comments/:id` | Public | Get a single comment by ID including author details |
+| `PUT` | `/api/v1/comments/:id` | Bearer JWT | Update a comment (**Owner only** — Anti-IDOR enforced) |
+| `DELETE` | `/api/v1/comments/:id` | Bearer JWT | Soft-delete a comment & decrement `comments_count` in **1 DB transaction** (**Owner only**) |
 
 ---
 
-## Standar Format Response HTTP & Mapping Code
+## 2. Architecture Explanation
 
-Seluruh endpoint mengembalikan struktur JSON `response.Envelope` yang seragam melalui package `src/internal/pkg/response`:
+This service uses a **Strict 3-Tier Decoupled Architecture** (`Handler` -> `Service` -> `Repository`) with isolated DTO contracts per layer so that HTTP transport details never leak into business logic and GORM database models never leak directly into JSON responses.
 
-### Response Sukses (`200 OK` / `201 Created`)
-```json
-{
-  "success": true,
-  "code": "SUCCESS",
-  "message": "Product retrieved successfully",
-  "data": {
-    "id": 1,
-    "sku": "SKU-001",
-    "name": "Kopi Susu Aren",
-    "price": 18000,
-    "created_at": "2026-10-31T00:00:00Z",
-    "updated_at": "2026-10-31T00:00:00Z"
-  }
-}
+```text
+maj-core-srvc/
+├── migrations/                              # Per-table single-file SQL migrations (-- +migrate Up & Down)
+├── src/
+│   ├── main.go                              # Application entrypoint & global OpenAPI annotations
+│   ├── cmd/                                 # Cobra CLI commands (http serve, event serve, migrate, seed)
+│   ├── docs/                                # Generated Swagger/OpenAPI 2.0 specs
+│   └── internal/
+│       ├── bootstrap/app.go                 # Dependency Injection wiring & Graceful Shutdown
+│       ├── config/config.go                 # Environment-driven configuration (.env)
+│       ├── infra/
+│       │   ├── database/
+│       │   │   ├── database.go              # Dynamic GORM dialector & sql.DB Connection Pool
+│       │   │   ├── tx.go                    # Context-propagated Transaction Manager (WithinTransaction)
+│       │   │   ├── gorm_logger.go           # Context-aware slog GORM logger + Slow Query detector
+│       │   │   ├── migration_source.go      # Custom golang-migrate driver for single-file Up/Down SQL
+│       │   │   └── seeder.go                # Transactional idempotent database seeder
+│       │   └── logger/logger.go             # Context-aware structured logger (auto-injects request_id & user_id)
+│       ├── middleware/                      # RequestID, Recover, CORS, Logger, ErrorHandler, JWTAuth, RateLimiter
+│       ├── router/http.go                   # Centralized HTTP route registration
+│       ├── handler/                         # Tier 1: Delivery Layer (parse HTTP, validate, return JSON Envelope)
+│       ├── service/                         # Tier 2: Business Logic Layer (ownership checks, transactions)
+│       ├── repository/                      # Tier 3: Data Access Layer (GORM SQL queries)
+│       ├── model/                           # Pure GORM database entities (with gorm.DeletedAt soft delete)
+│       ├── dto/
+│       │   ├── request/                     # HTTP request payloads & query parameters
+│       │   ├── service/                     # Transport-agnostic inputs/filters for Service layer
+│       │   └── response/                    # Outbound JSON response structs & model mappers
+│       └── pkg/
+│           ├── response/                    # Standardized JSON Envelope, AppError, & HTTP status code mapping
+│           └── validator/                   # Struct validation wrapper producing per-field error details
 ```
 
-### Response List dengan Pagination (`200 OK`)
-```json
-{
-  "success": true,
-  "code": "SUCCESS",
-  "message": "Products retrieved successfully",
-  "data": [],
-  "meta": {
-    "page": 1,
-    "per_page": 10,
-    "total_items": 45,
-    "total_pages": 5
-  }
-}
+### Data Flow & Layer Boundaries
+
+```mermaid
+flowchart LR
+    Client["HTTP Client"] -->|JSON / Query| ReqDTO["dto/request"]
+    ReqDTO -->|.ToServiceInput()| SvcDTO["dto/service"]
+    SvcDTO --> Service["Service Layer (TxManager & Authz)"]
+    Service <-->|model.Entity| Repo["Repository Layer (GORM)"]
+    Service -->|ToResponse()| RespDTO["dto/response"]
+    RespDTO -->|response.Envelope| Client
 ```
 
-### Response Error / Validasi Gagal (`4xx` / `5xx`)
-```json
-{
-  "success": false,
-  "code": "VALIDATION_ERROR",
-  "message": "Validation failed",
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "details": [
-      {
-        "field": "sku",
-        "message": "sku is required"
-      }
-    ]
-  }
-}
-```
-
-### Daftar Mapping `response.Code` Bawaan
-
-| Konstanta `response.Code` | Kode String | HTTP Status |
-| :--- | :--- | :---: |
-| `CodeSuccess` | `SUCCESS` | `200 OK` |
-| `CodeCreated` | `CREATED` | `201 Created` |
-| `CodeBadRequest` | `BAD_REQUEST` | `400 Bad Request` |
-| `CodeUnauthorized` | `UNAUTHORIZED` | `401 Unauthorized` |
-| `CodeForbidden` | `FORBIDDEN` | `403 Forbidden` |
-| `CodeNotFound` | `NOT_FOUND` | `404 Not Found` |
-| `CodeConflict` | `CONFLICT` | `409 Conflict` |
-| `CodeDuplicateEntry` | `DUPLICATE_ENTRY` | `409 Conflict` |
-| `CodeValidationError` | `VALIDATION_ERROR` | `422 Unprocessable Entity` |
-| `CodeTooManyRequests` | `TOO_MANY_REQUESTS` | `429 Too Many Requests` |
-| `CodeInternalError` | `INTERNAL_SERVER_ERROR` | `500 Internal Server Error` |
-| `CodeDatabaseError` | `DATABASE_ERROR` | `500 Internal Server Error` |
-| `CodeServiceUnavailable` | `SERVICE_UNAVAILABLE` | `503 Service Unavailable` |
-
-> Di dalam `service` atau `handler`, cukup kembalikan `response.NewError(response.CodeNotFound, "Pesan custom")` atau `response.WrapError(response.CodeDatabaseError, "Pesan", err)`. Middleware `ErrorHandler` akan otomatis menerjemahkannya ke HTTP status code dan format JSON di atas.
+### Key Architectural Highlights
+1. **Context-Propagated Database Transactions (`TxManager`)**:
+   - `database.TxManager.WithinTransaction(ctx, fn)` starts a GORM transaction and injects it into `context.Context`.
+   - Repositories call `database.FromContext(ctx, r.db)` so any repository method automatically participates in an active transaction without polluting repository method signatures with `*gorm.DB`.
+   - Used in `CommentService.Create` (insert comment + increment `posts.comments_count`), `CommentService.Delete` (soft-delete comment + decrement `posts.comments_count`), `PostService.Delete` (cascade soft-delete comments + soft-delete post), and `database.Seed`.
+2. **Defense-in-Depth Anti-IDOR Protection**:
+   - Actor identity (`user_id`) is extracted strictly from verified JWT claims in `middleware.JWTAuth`.
+   - **Service Layer**: Verifies `resource.AuthorID == input.ActorID` before any mutation and returns `403 FORBIDDEN` on mismatch.
+   - **Repository Layer**: Enforces `WHERE id = ? AND author_id = ?` on all SQL `UPDATE` and `DELETE` statements to prevent Time-of-Check to Time-of-Use (TOCTOU) race conditions.
+3. **Standardized Response Envelope & Centralized Error Mapping**:
+   - All endpoints return `response.Envelope` (`success`, `code`, `message`, `data`, `meta`, `error`).
+   - Services return domain errors (`response.NewError(response.CodeForbidden, ...)`), which `middleware.ErrorHandler` maps to deterministic HTTP status codes (`400`, `401`, `403`, `404`, `409`, `422`, `429`, `500`).
 
 ---
 
-## Panduan Menambahkan Modul / Endpoint Baru
+## 3. Technology Choices Justification
 
-1. **Buat Migrasi & Model**:
-   - Buat file migrasi dengan `make migrate-create name=create_xxx_table`.
-   - Buat entity GORM di `src/internal/model/<module>.go`.
-2. **Buat Kontrak DTO**:
-   - Request HTTP di `src/internal/dto/request/<module>_request_dto.go` (tambahkan tag `validate:"..."`).
-   - Input Service di `src/internal/dto/service/<module>_service_dto.go`.
-   - Response JSON di `src/internal/dto/response/<module>_response_dto.go`.
-3. **Buat Repository, Service, dan Handler**:
-   - Implementasikan query DB di `src/internal/repository/`.
-   - Implementasikan logika bisnis di `src/internal/service/`.
-   - Implementasikan handler Fiber + anotasi Swagger di `src/internal/handler/`.
-4. **Daftarkan ke Router & Bootstrap**:
-   - Hubungkan dependency di `src/internal/bootstrap/app.go` dan daftarkan endpoint di `src/internal/router/http.go`.
-   - Jalankan `make swagger` untuk memperbarui dokumentasi OpenAPI.
+| Technology | Justification |
+| :--- | :--- |
+| **Go (`1.26+`)** | Strong static typing, fast compilation, low memory footprint, and native concurrency primitives suitable for high-throughput microservices. |
+| **Fiber v2 (`gofiber/fiber/v2`)** | Built on top of `fasthttp` with zero-allocation routing, rich middleware ecosystem, and Express-like ergonomics while maintaining top-tier throughput. |
+| **GORM + `database/sql` Pool** | Supports multi-driver flexibility (`mysql`, `postgres`, `sqlite`), clean association preloading (`Preload("Author")`), automatic soft-delete handling (`gorm.DeletedAt`), and full control over underlying `sql.DB` connection pool tuning (`MaxOpenConns`, `MaxIdleConns`, `ConnMaxLifetime`). |
+| **`golang-migrate` + Custom Single-File Driver** | Industry-standard schema versioning extended with a custom `source.Driver` (`singleFileSource`) so developers can keep both `-- +migrate Up` and `-- +migrate Down` inside a single per-table `.sql` file, eliminating file-pair clutter. |
+| **`go-playground/validator/v10`** | Battle-tested declarative struct validation using struct tags (`required`, `email`, `min`, `max`), customized to report exact JSON field names in `422 VALIDATION_ERROR` responses. |
+| **`golang-jwt/jwt/v5`** | Stateless authentication with strict signing algorithm whitelisting (`HS256`/`HS384`/`HS512`) and expiration validation. |
+| **Standard Library `log/slog`** | Zero external logging dependency, structured JSON/Text output, wrapped with a custom `contextHandler` that automatically attaches `request_id` and `user_id` to every log line across Handler, Service, and GORM SQL logs. |
+| **Swaggo (`swaggo/swag`)** | Generates OpenAPI 2.0 specifications directly from Go doc comments, keeping documentation in sync with code and serving interactive Swagger UI at `/swagger/index.html`. |
 
 ---
 
-## Testing & Build
+## 4. Known Limitations and Future Improvements
 
+### Known Limitations
+1. **Stateless JWT Without Immediate Revocation**: Access tokens remain valid until `JWT_EXPIRATION` elapses because there is no server-side token blacklist or refresh token rotation table yet.
+2. **In-Memory Rate Limiter**: Fiber's built-in rate limiter stores counters in local process memory, which resets on restart and is not shared across multiple horizontal replicas.
+3. **Offset-Based Pagination & `LIKE` Search**: `LIMIT/OFFSET` pagination and `LOWER(title) LIKE '%...%'` queries work well for small-to-medium datasets but degrade on millions of rows without full-text indexes.
+
+### Future Improvements
+1. **Refresh Token Rotation & Redis Token Blacklist**: Add `POST /api/v1/auth/refresh` and `POST /api/v1/auth/logout` backed by Redis to support instant token revocation.
+2. **Distributed Rate Limiting & Caching**: Integrate Redis for distributed rate limiting across Kubernetes pods and cache hot blog posts (`GET /api/v1/posts/:id`) with write-through invalidation.
+3. **Cursor-Based (Keyset) Pagination & Full-Text Search**: Support cursor pagination (`after_id`) for infinite scrolling and MySQL `FULLTEXT` / PostgreSQL `tsvector` indexes for fast relevance search.
+4. **OpenTelemetry Distributed Tracing & Prometheus Metrics**: Export `/metrics` and OTLP spans to correlate HTTP latency and database transaction duration in Grafana/Tempo.
+
+---
+
+## 5. Test Coverage Report
+
+Unit and integration tests cover the end-to-end HTTP pipeline, service business logic, database transactions, anti-IDOR authorization checks, single-file migration parsing, idempotent seeding, JWT/API-key middlewares, context-aware logging, and input validation.
+
+### Running Tests & Coverage
 ```bash
-# Menjalankan seluruh unit test
+# Run all unit & integration tests with verbose output
 make test
 
-# Re-generate dokumentasi Swagger
-make swagger
-
-# Build binary ke ./bin/app
-make build
+# Run statement coverage report across tested packages
+make test-cover
 ```
 
+### Coverage Summary by Package
+
+| Package | Statement Coverage | Key Tested Scenarios |
+| :--- | :---: | :--- |
+| `src/internal/service` | **72.1%** | Register, duplicate email (`409`), login (`200`/`401`), profile, post CRUD, comment CRUD, atomic `comments_count` increment/decrement & cascade delete transactions, **Anti-IDOR (`403 Forbidden`)** on cross-user post/comment update & delete |
+| `src/internal/handler` | **71.8%** | End-to-end HTTP tests (`Register`, `Login`, `Me`, `Create/List/Get/Update/Delete Post`, `Create/List/Get/Update/Delete Comment`, `401 Unauthorized`, `403 Forbidden` Anti-IDOR, `/healthz`, `/readyz`) |
+| `src/internal/pkg/validator` | **63.2%** | Struct validation rules (`required`, `email`, `min`, `max`, `gte`) and JSON field name extraction |
+| `src/internal/middleware` | **57.5%** | `JWTAuth` token parsing & expiry, `RequireRoles` RBAC, `APIKeyAuth`, and IP `RateLimiter` (`429`) |
+| `src/internal/infra/database` | **51.7%** | Single-file `-- +migrate Up/Down` parser, per-table migration ordering, and idempotent transactional `Seed()` |
+| `src/internal/infra/logger` | **16.7%** | Automatic `request_id` and `user_id` extraction from `context.Context` into structured `slog` records |

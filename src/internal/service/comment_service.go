@@ -16,6 +16,7 @@ import (
 
 type CommentService interface {
 	Create(ctx context.Context, input servicedto.CreateCommentInput) (*responsedto.CommentResponse, error)
+	GetByID(ctx context.Context, id uint64) (*responsedto.CommentResponse, error)
 	ListByPostID(ctx context.Context, filter servicedto.ListCommentFilter) ([]responsedto.CommentResponse, int64, error)
 	Update(ctx context.Context, input servicedto.UpdateCommentInput) (*responsedto.CommentResponse, error)
 	Delete(ctx context.Context, input servicedto.DeleteCommentInput) error
@@ -88,6 +89,17 @@ func (s *commentService) Create(ctx context.Context, input servicedto.CreateComm
 	return responsedto.ToCommentResponse(createdComment), nil
 }
 
+func (s *commentService) GetByID(ctx context.Context, id uint64) (*responsedto.CommentResponse, error) {
+	comment, err := s.commentRepo.FindByID(ctx, id)
+	if err != nil {
+		return nil, response.WrapError(response.CodeDatabaseError, "Failed to fetch comment", err)
+	}
+	if comment == nil {
+		return nil, response.NewError(response.CodeNotFound, "Comment not found")
+	}
+	return responsedto.ToCommentResponse(comment), nil
+}
+
 func (s *commentService) ListByPostID(ctx context.Context, filter servicedto.ListCommentFilter) ([]responsedto.CommentResponse, int64, error) {
 	if filter.Page < 1 {
 		filter.Page = 1
@@ -154,14 +166,14 @@ func (s *commentService) Delete(ctx context.Context, input servicedto.DeleteComm
 		return response.NewError(response.CodeNotFound, "Comment not found")
 	}
 
-	// Authorization: pembuat komentar ATAU role 'admin' boleh menghapus
-	if comment.AuthorID != input.ActorID && !strings.EqualFold(input.ActorRole, model.RoleAdmin) {
+	// Anti-IDOR Authorization: hanya pembuat komentar (AuthorID == ActorID) yang boleh menghapus komentar miliknya
+	if comment.AuthorID != input.ActorID {
 		return response.NewError(response.CodeForbidden, "You are not allowed to delete this comment")
 	}
 
-	// Database Transaction: hapus komentar sekaligus kurangi counter comments_count pada post secara atomik
+	// Database Transaction: hapus komentar (dikunci juga dengan author_id di level SQL) sekaligus kurangi counter comments_count pada post secara atomik
 	err = s.txManager.WithinTransaction(ctx, func(txCtx context.Context) error {
-		deleted, err := s.commentRepo.Delete(txCtx, comment.ID)
+		deleted, err := s.commentRepo.Delete(txCtx, comment.ID, input.ActorID)
 		if err != nil {
 			return response.WrapError(response.CodeDatabaseError, "Failed to delete comment", err)
 		}

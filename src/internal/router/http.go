@@ -64,11 +64,12 @@ func RegisterHTTP(app *fiber.App, deps Dependencies) {
 		}
 	}
 
-	// 3. Direct Comment Routes (Update & Delete by Comment ID)
+	// 3. Direct Comment Routes (Get, Update & Delete by Comment ID)
 	if deps.CommentHandler != nil {
-		comments := v1.Group("/comments", jwtMiddleware)
-		comments.Put("/:id", deps.CommentHandler.Update)
-		comments.Delete("/:id", deps.CommentHandler.Delete)
+		comments := v1.Group("/comments")
+		comments.Get("/:id", deps.CommentHandler.GetByID)
+		comments.Put("/:id", jwtMiddleware, deps.CommentHandler.Update)
+		comments.Delete("/:id", jwtMiddleware, deps.CommentHandler.Delete)
 	}
 
 	// 4. Internal Service-to-Service Routes (X-API-Key)

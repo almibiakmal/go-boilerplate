@@ -47,11 +47,6 @@ definitions:
         maxLength: 72
         minLength: 6
         type: string
-      role:
-        enum:
-        - user
-        - admin
-        type: string
     required:
     - email
     - name
@@ -339,8 +334,7 @@ paths:
       - Auth
   /api/v1/comments/{id}:
     delete:
-      description: Menghapus komentar (diizinkan untuk pembuat komentar atau role
-        admin)
+      description: Menghapus komentar (hanya pembuat komentar yang diizinkan)
       parameters:
       - description: Comment ID
         in: path
@@ -373,6 +367,37 @@ paths:
       security:
       - BearerAuth: []
       summary: Delete Comment
+      tags:
+      - Comments
+    get:
+      description: Mengambil detail satu komentar beserta informasi author
+      parameters:
+      - description: Comment ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/responsedto.CommentResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Get Comment by ID
       tags:
       - Comments
     put:
@@ -512,8 +537,8 @@ paths:
       - Posts
   /api/v1/posts/{id}:
     delete:
-      description: Menghapus artikel blog beserta komentarnya (diizinkan untuk pemilik
-        post atau role admin)
+      description: Menghapus artikel blog beserta komentarnya (hanya pemilik post
+        yang diizinkan)
       parameters:
       - description: Post ID
         in: path

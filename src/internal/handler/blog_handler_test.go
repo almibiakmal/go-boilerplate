@@ -135,5 +135,98 @@ func TestBlogHTTP_EndToEnd(t *testing.T) {
 	assert.Equal(t, http.StatusOK, getPostResp.StatusCode)
 	require.NoError(t, json.NewDecoder(getPostResp.Body).Decode(&postEnv))
 	assert.Equal(t, 1, postEnv.Data.CommentsCount)
+
+	// 6. Anti-IDOR Check via HTTP: User ke-2 mencoba menghapus Post & Comment milik User ke-1 -> harus ditolak 403 Forbidden
+	reg2Body := []byte(`{"name":"Budi Hacker","email":"budi@majoo.id","password":"password123"}`)
+	reg2Req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(reg2Body))
+	reg2Req.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	reg2Resp, err := app.Test(reg2Req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusCreated, reg2Resp.StatusCode)
+
+	var reg2Env struct {
+		Data responsedto.AuthResponse `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(reg2Resp.Body).Decode(&reg2Env))
+	attackerToken := reg2Env.Data.AccessToken
+
+	idorDeletePostReq := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/posts/%d", postID), nil)
+	idorDeletePostReq.Header.Set(fiber.HeaderAuthorization, "Bearer "+attackerToken)
+	idorDeletePostResp, err := app.Test(idorDeletePostReq)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusForbidden, idorDeletePostResp.StatusCode)
+
+	idorDeleteCommentReq := httptest.NewRequest(http.MethodDelete, "/api/v1/comments/1", nil)
+	idorDeleteCommentReq.Header.Set(fiber.HeaderAuthorization, "Bearer "+attackerToken)
+	idorDeleteCommentResp, err := app.Test(idorDeleteCommentReq)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusForbidden, idorDeleteCommentResp.StatusCode)
+
+	// 7. Uji endpoint lainnya: Login, Me, List Posts, Update Post, List Comments, Get Comment, Update Comment, Delete Comment, Delete Post, Healthz, Readyz
+	loginBody := []byte(`{"email":"andi@majoo.id","password":"password123"}`)
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(loginBody))
+	loginReq.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	loginResp, err := app.Test(loginReq)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, loginResp.StatusCode)
+
+	meReq := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
+	meReq.Header.Set(fiber.HeaderAuthorization, "Bearer "+token)
+	meResp, err := app.Test(meReq)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, meResp.StatusCode)
+
+	listPostsReq := httptest.NewRequest(http.MethodGet, "/api/v1/posts?page=1&per_page=10&search=Golang", nil)
+	listPostsResp, err := app.Test(listPostsReq)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, listPostsResp.StatusCode)
+
+	updatePostBody := []byte(`{"title":"Belajar Golang Fiber Updated","content":"Panduan lengkap membuat REST API dengan Fiber dan GORM updated.","is_published":true}`)
+	updatePostReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/v1/posts/%d", postID), bytes.NewReader(updatePostBody))
+	updatePostReq.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	updatePostReq.Header.Set(fiber.HeaderAuthorization, "Bearer "+token)
+	updatePostResp, err := app.Test(updatePostReq)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, updatePostResp.StatusCode)
+
+	listCommentsReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/posts/%d/comments?page=1&per_page=10", postID), nil)
+	listCommentsResp, err := app.Test(listCommentsReq)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, listCommentsResp.StatusCode)
+
+	getCommentReq := httptest.NewRequest(http.MethodGet, "/api/v1/comments/1", nil)
+	getCommentResp, err := app.Test(getCommentReq)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, getCommentResp.StatusCode)
+
+	updateCommentBody := []byte(`{"content":"Komentar sudah diupdate oleh pemiliknya!"}`)
+	updateCommentReq := httptest.NewRequest(http.MethodPut, "/api/v1/comments/1", bytes.NewReader(updateCommentBody))
+	updateCommentReq.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	updateCommentReq.Header.Set(fiber.HeaderAuthorization, "Bearer "+token)
+	updateCommentResp, err := app.Test(updateCommentReq)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, updateCommentResp.StatusCode)
+
+	delCommentReq := httptest.NewRequest(http.MethodDelete, "/api/v1/comments/1", nil)
+	delCommentReq.Header.Set(fiber.HeaderAuthorization, "Bearer "+token)
+	delCommentResp, err := app.Test(delCommentReq)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, delCommentResp.StatusCode)
+
+	delPostReq := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/posts/%d", postID), nil)
+	delPostReq.Header.Set(fiber.HeaderAuthorization, "Bearer "+token)
+	delPostResp, err := app.Test(delPostReq)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, delPostResp.StatusCode)
+
+	healthReq := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	healthResp, err := app.Test(healthReq)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, healthResp.StatusCode)
+
+	readyReq := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	readyResp, err := app.Test(readyReq)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, readyResp.StatusCode)
 }
 

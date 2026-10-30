@@ -16,7 +16,7 @@ type CommentRepository interface {
 	FindByID(ctx context.Context, id uint64) (*model.Comment, error)
 	ListByPostID(ctx context.Context, filter servicedto.ListCommentFilter) ([]model.Comment, int64, error)
 	Update(ctx context.Context, comment *model.Comment) error
-	Delete(ctx context.Context, id uint64) (bool, error)
+	Delete(ctx context.Context, id uint64, authorID uint64) (bool, error)
 	DeleteByPostID(ctx context.Context, postID uint64) error
 }
 
@@ -66,11 +66,23 @@ func (r *commentRepository) ListByPostID(ctx context.Context, f servicedto.ListC
 }
 
 func (r *commentRepository) Update(ctx context.Context, comment *model.Comment) error {
-	return database.FromContext(ctx, r.db).Save(comment).Error
+	res := database.FromContext(ctx, r.db).
+		Model(&model.Comment{}).
+		Where("id = ? AND author_id = ?", comment.ID, comment.AuthorID).
+		Update("content", comment.Content)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
-func (r *commentRepository) Delete(ctx context.Context, id uint64) (bool, error) {
-	res := database.FromContext(ctx, r.db).Delete(&model.Comment{}, id)
+func (r *commentRepository) Delete(ctx context.Context, id uint64, authorID uint64) (bool, error) {
+	res := database.FromContext(ctx, r.db).
+		Where("id = ? AND author_id = ?", id, authorID).
+		Delete(&model.Comment{})
 	if res.Error != nil {
 		return false, res.Error
 	}

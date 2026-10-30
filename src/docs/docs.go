@@ -193,6 +193,57 @@ const docTemplate = `{
             }
         },
         "/api/v1/comments/{id}": {
+            "get": {
+                "description": "Mengambil detail satu komentar beserta informasi author",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Comments"
+                ],
+                "summary": "Get Comment by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Comment ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.Envelope"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/responsedto.CommentResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/response.Envelope"
+                        }
+                    }
+                }
+            },
             "put": {
                 "security": [
                     {
@@ -285,7 +336,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Menghapus komentar (diizinkan untuk pembuat komentar atau role admin)",
+                "description": "Menghapus komentar (hanya pembuat komentar yang diizinkan)",
                 "produces": [
                     "application/json"
                 ],
@@ -614,7 +665,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Menghapus artikel blog beserta komentarnya (diizinkan untuk pemilik post atau role admin)",
+                "description": "Menghapus artikel blog beserta komentarnya (hanya pemilik post yang diizinkan)",
                 "produces": [
                     "application/json"
                 ],
@@ -937,13 +988,6 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 72,
                     "minLength": 6
-                },
-                "role": {
-                    "type": "string",
-                    "enum": [
-                        "user",
-                        "admin"
-                    ]
                 }
             }
         },

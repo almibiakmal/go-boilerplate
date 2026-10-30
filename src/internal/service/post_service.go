@@ -147,17 +147,17 @@ func (s *postService) Delete(ctx context.Context, input servicedto.DeletePostInp
 		return response.NewError(response.CodeNotFound, "Post not found")
 	}
 
-	// Authorization: pemilik post ATAU role 'admin' boleh menghapus
-	if post.AuthorID != input.ActorID && !strings.EqualFold(input.ActorRole, model.RoleAdmin) {
+	// Anti-IDOR Authorization: hanya pemilik post (AuthorID == ActorID) yang boleh menghapus post miliknya
+	if post.AuthorID != input.ActorID {
 		return response.NewError(response.CodeForbidden, "You are not allowed to delete this post")
 	}
 
-	// Database Transaction: hapus semua komentar milik post sekaligus hapus post secara atomik
+	// Database Transaction: hapus semua komentar milik post sekaligus hapus post secara atomik (dikunci juga dengan author_id di level SQL)
 	err = s.txManager.WithinTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.commentRepo.DeleteByPostID(txCtx, post.ID); err != nil {
 			return response.WrapError(response.CodeDatabaseError, "Failed to delete post comments", err)
 		}
-		deleted, err := s.postRepo.Delete(txCtx, post.ID)
+		deleted, err := s.postRepo.Delete(txCtx, post.ID, input.ActorID)
 		if err != nil {
 			return response.WrapError(response.CodeDatabaseError, "Failed to delete post", err)
 		}

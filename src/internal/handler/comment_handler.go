@@ -65,6 +65,31 @@ func (h *CommentHandler) Create(c *fiber.Ctx) error {
 	return response.Created(c, "Comment created successfully", res)
 }
 
+// GetByID mengambil detail satu komentar berdasarkan ID.
+//
+// @Summary      Get Comment by ID
+// @Description  Mengambil detail satu komentar beserta informasi author
+// @Tags         Comments
+// @Produce      json
+// @Param        id   path      int  true  "Comment ID"
+// @Success      200  {object}  response.Envelope{data=responsedto.CommentResponse}
+// @Failure      400  {object}  response.Envelope
+// @Failure      404  {object}  response.Envelope
+// @Router       /api/v1/comments/{id} [get]
+func (h *CommentHandler) GetByID(c *fiber.Ctx) error {
+	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil || id == 0 {
+		return response.NewError(response.CodeBadRequest, "Invalid comment ID parameter")
+	}
+
+	res, err := h.commentSvc.GetByID(c.UserContext(), id)
+	if err != nil {
+		return err
+	}
+
+	return response.OK(c, "Comment retrieved successfully", res)
+}
+
 // ListByPostID mengambil daftar komentar pada sebuah artikel blog.
 //
 // @Summary      List Comments by Post ID
@@ -151,7 +176,7 @@ func (h *CommentHandler) Update(c *fiber.Ctx) error {
 // Delete menghapus komentar dan mengurangi counter comments_count pada post dalam satu transaksi DB.
 //
 // @Summary      Delete Comment
-// @Description  Menghapus komentar (diizinkan untuk pembuat komentar atau role admin)
+// @Description  Menghapus komentar (hanya pembuat komentar yang diizinkan)
 // @Tags         Comments
 // @Produce      json
 // @Security     BearerAuth

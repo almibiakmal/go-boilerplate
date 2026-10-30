@@ -165,7 +165,7 @@ func (h *PostHandler) Update(c *fiber.Ctx) error {
 // Delete menghapus artikel blog beserta seluruh komentarnya dalam satu transaksi database.
 //
 // @Summary      Delete Post
-// @Description  Menghapus artikel blog beserta komentarnya (diizinkan untuk pemilik post atau role admin)
+// @Description  Menghapus artikel blog beserta komentarnya (hanya pemilik post yang diizinkan)
 // @Tags         Posts
 // @Produce      json
 // @Security     BearerAuth

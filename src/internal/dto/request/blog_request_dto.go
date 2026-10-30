@@ -12,7 +12,6 @@ type RegisterRequest struct {
 	Name     string `json:"name" validate:"required,min=2,max=100"`
 	Email    string `json:"email" validate:"required,email,max=150"`
 	Password string `json:"password" validate:"required,min=6,max=72"`
-	Role     string `json:"role" validate:"omitempty,oneof=user admin"`
 }
 
 func (r RegisterRequest) ToServiceInput() servicedto.RegisterUserInput {
@@ -20,7 +19,6 @@ func (r RegisterRequest) ToServiceInput() servicedto.RegisterUserInput {
 		Name:     strings.TrimSpace(r.Name),
 		Email:    strings.ToLower(strings.TrimSpace(r.Email)),
 		Password: r.Password,
-		Role:     strings.ToLower(strings.TrimSpace(r.Role)),
 	}
 }
 

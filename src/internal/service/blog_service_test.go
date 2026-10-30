@@ -96,6 +96,18 @@ func TestBlogFlow_Auth_CRUD_And_Transactions(t *testing.T) {
 	require.True(t, errors.As(err, &appErr))
 	assert.Equal(t, response.CodeUnauthorized, appErr.Code)
 
+	// Login dengan password benar harus berhasil & GetProfile mengembalikan data user
+	loginRes, err := authSvc.Login(ctx, servicedto.LoginInput{
+		Email:    "author@majoo.id",
+		Password: "password123",
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, loginRes.AccessToken)
+
+	profileRes, err := authSvc.GetProfile(ctx, authorID)
+	require.NoError(t, err)
+	assert.Equal(t, "author@majoo.id", profileRes.Email)
+
 	// 2. Author membuat Post baru
 	post, err := postSvc.Create(ctx, servicedto.CreatePostInput{
 		AuthorID:    authorID,
@@ -106,6 +118,29 @@ func TestBlogFlow_Auth_CRUD_And_Transactions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, authorID, post.AuthorID)
 	assert.Equal(t, 0, post.CommentsCount)
+
+	// List Posts dengan filter pencarian & author_id
+	postsList, totalPosts, err := postSvc.List(ctx, servicedto.ListPostFilter{
+		Page:     1,
+		PerPage:  10,
+		Search:   "Microservice",
+		AuthorID: authorID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), totalPosts)
+	assert.Len(t, postsList, 1)
+
+	// Author mengupdate Post miliknya sendiri -> 200 OK
+	updatedOwnPost, err := postSvc.Update(ctx, servicedto.UpdatePostInput{
+		ID:          post.ID,
+		ActorID:     authorID,
+		ActorRole:   model.RoleUser,
+		Title:       "Arsitektur Microservice di Golang (Updated)",
+		Content:     "Konten artikel yang sudah diperbarui oleh penulis aslinya.",
+		IsPublished: true,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "Arsitektur Microservice di Golang (Updated)", updatedOwnPost.Title)
 
 	// 3. Authorization Check: User lain TIDAK BOLEH mengedit post milik Author (403 FORBIDDEN)
 	_, err = postSvc.Update(ctx, servicedto.UpdatePostInput{
@@ -139,11 +174,63 @@ func TestBlogFlow_Auth_CRUD_And_Transactions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, updatedPost.CommentsCount)
 
-	// 5. Transactional Comment Deletion oleh Admin -> comments_count berkurang menjadi 1
+	// GetByID, ListByPostID, dan Update Comment oleh pemiliknya sendiri
+	c1Detail, err := commentSvc.GetByID(ctx, c1.ID)
+	require.NoError(t, err)
+	assert.Equal(t, c1.ID, c1Detail.ID)
+
+	commentsList, totalComments, err := commentSvc.ListByPostID(ctx, servicedto.ListCommentFilter{
+		PostID:  post.ID,
+		Page:    1,
+		PerPage: 10,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), totalComments)
+	assert.Len(t, commentsList, 2)
+
+	updatedC1, err := commentSvc.Update(ctx, servicedto.UpdateCommentInput{
+		ID:        c1.ID,
+		ActorID:   otherUserID,
+		ActorRole: model.RoleUser,
+		Content:   "Artikel yang sangat bermanfaat! (Edited)",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "Artikel yang sangat bermanfaat! (Edited)", updatedC1.Content)
+
+	// 5. Anti-IDOR Check: User lain (termasuk Admin sekalipun) TIDAK BOLEH mengedit atau menghapus komentar/post milik orang lain (403 FORBIDDEN)
+	_, err = commentSvc.Update(ctx, servicedto.UpdateCommentInput{
+		ID:        c1.ID,
+		ActorID:   authorID,
+		ActorRole: model.RoleUser,
+		Content:   "Coba bajak komentar orang lain",
+	})
+	require.Error(t, err)
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, response.CodeForbidden, appErr.Code)
+
 	err = commentSvc.Delete(ctx, servicedto.DeleteCommentInput{
 		ID:        c1.ID,
 		ActorID:   adminID,
 		ActorRole: model.RoleAdmin,
+	})
+	require.Error(t, err)
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, response.CodeForbidden, appErr.Code)
+
+	err = postSvc.Delete(ctx, servicedto.DeletePostInput{
+		ID:        post.ID,
+		ActorID:   otherUserID,
+		ActorRole: model.RoleUser,
+	})
+	require.Error(t, err)
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, response.CodeForbidden, appErr.Code)
+
+	// 6. Transactional Comment Deletion oleh pemilik komentar sendiri (otherUserID) -> comments_count berkurang menjadi 1
+	err = commentSvc.Delete(ctx, servicedto.DeleteCommentInput{
+		ID:        c1.ID,
+		ActorID:   otherUserID,
+		ActorRole: model.RoleUser,
 	})
 	require.NoError(t, err)
 
@@ -151,7 +238,7 @@ func TestBlogFlow_Auth_CRUD_And_Transactions(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, updatedPost.CommentsCount)
 
-	// 6. Transactional Post Deletion: Hapus post sekaligus menghapus sisa komentar (c2) di dalam 1 transaksi DB
+	// 7. Transactional Post Deletion oleh pemilik post sendiri (authorID): Hapus post sekaligus menghapus sisa komentar (c2) di dalam 1 transaksi DB
 	err = postSvc.Delete(ctx, servicedto.DeletePostInput{
 		ID:        post.ID,
 		ActorID:   authorID,
