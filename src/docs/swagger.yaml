@@ -1,0 +1,345 @@
+basePath: /
+definitions:
+  requestdto.CreateProductRequest:
+    properties:
+      name:
+        maxLength: 150
+        minLength: 2
+        type: string
+      price:
+        minimum: 0
+        type: integer
+      sku:
+        maxLength: 64
+        minLength: 2
+        type: string
+    required:
+    - name
+    - sku
+    type: object
+  requestdto.UpdateProductRequest:
+    properties:
+      name:
+        maxLength: 150
+        minLength: 2
+        type: string
+      price:
+        minimum: 0
+        type: integer
+    required:
+    - name
+    type: object
+  response.Code:
+    enum:
+    - SUCCESS
+    - CREATED
+    - BAD_REQUEST
+    - VALIDATION_ERROR
+    - UNAUTHORIZED
+    - FORBIDDEN
+    - NOT_FOUND
+    - CONFLICT
+    - DUPLICATE_ENTRY
+    - TOO_MANY_REQUESTS
+    - INTERNAL_SERVER_ERROR
+    - SERVICE_UNAVAILABLE
+    - DATABASE_ERROR
+    type: string
+    x-enum-varnames:
+    - CodeSuccess
+    - CodeCreated
+    - CodeBadRequest
+    - CodeValidationError
+    - CodeUnauthorized
+    - CodeForbidden
+    - CodeNotFound
+    - CodeConflict
+    - CodeDuplicateEntry
+    - CodeTooManyRequests
+    - CodeInternalError
+    - CodeServiceUnavailable
+    - CodeDatabaseError
+  response.Envelope:
+    properties:
+      code:
+        $ref: '#/definitions/response.Code'
+      data: {}
+      error:
+        $ref: '#/definitions/response.ErrorPayload'
+      message:
+        type: string
+      meta:
+        $ref: '#/definitions/response.PageMeta'
+      success:
+        type: boolean
+    type: object
+  response.ErrorPayload:
+    properties:
+      code:
+        $ref: '#/definitions/response.Code'
+      details:
+        items:
+          $ref: '#/definitions/response.FieldError'
+        type: array
+    type: object
+  response.FieldError:
+    properties:
+      field:
+        type: string
+      message:
+        type: string
+    type: object
+  response.PageMeta:
+    properties:
+      page:
+        type: integer
+      per_page:
+        type: integer
+      total_items:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  responsedto.ProductResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      price:
+        type: integer
+      sku:
+        type: string
+      updated_at:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: RESTful API Microservice Boilerplate (Fiber + GORM).
+  title: Majoo Core Service API
+  version: "1.0"
+paths:
+  /api/v1/products:
+    get:
+      description: Mengambil daftar produk dengan filter pencarian dan pagination
+      parameters:
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Items per page (default: 10, max: 100)'
+        in: query
+        name: per_page
+        type: integer
+      - description: Search by name or SKU
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/responsedto.ProductResponse'
+                  type: array
+              type: object
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: List Products
+      tags:
+      - Products
+    post:
+      consumes:
+      - application/json
+      description: Membuat data produk baru
+      parameters:
+      - description: Create Product Payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/requestdto.CreateProductRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/responsedto.ProductResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Create Product
+      tags:
+      - Products
+  /api/v1/products/{id}:
+    delete:
+      description: Menghapus satu produk berdasarkan ID
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Delete Product
+      tags:
+      - Products
+    get:
+      description: Mengambil detail satu produk berdasarkan ID
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/responsedto.ProductResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Get Product by ID
+      tags:
+      - Products
+    put:
+      consumes:
+      - application/json
+      description: Memperbarui nama dan harga produk berdasarkan ID
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update Product Payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/requestdto.UpdateProductRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/responsedto.ProductResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Update Product
+      tags:
+      - Products
+  /healthz:
+    get:
+      description: Memeriksa apakah proses HTTP server masih hidup
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Liveness Probe
+      tags:
+      - Health
+  /readyz:
+    get:
+      description: Memeriksa koneksi database dan menampilkan statistik connection
+        pool
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: Readiness Probe
+      tags:
+      - Health
+schemes:
+- http
+- https
+securityDefinitions:
+  ApiKeyAuth:
+    description: Internal Service-to-Service API Key
+    in: header
+    name: X-API-Key
+    type: apiKey
+  BearerAuth:
+    description: 'Masukkan JWT token dengan format: Bearer <token>'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

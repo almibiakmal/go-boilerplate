@@ -1,0 +1,45 @@
+# Binaries for programs and plugins
+bin/
+dist/
+tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+app
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.html
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
+# Application logs & local SQLite databases
+logs/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE & Editor directories
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
+

@@ -1,0 +1,29 @@
+# Git & version control
+.git
+.gitignore
+
+# Build artifacts & temporary directories
+bin/
+dist/
+tmp/
+logs/
+*.log
+*.test
+*.out
+coverage.html
+
+# Environment & local config files (keep secrets out of Docker image)
+.env
+.env.*
+
+# Docker & Documentation files not needed for compilation
+Dockerfile
+docker-compose*.yml
+README.md
+
+# IDE & OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
