@@ -65,5 +65,5 @@ func runApp(run func(ctx context.Context, app *bootstrap.App) error) error {
 }
 
 func init() {
-	rootCmd.AddCommand(httpCmd, eventCmd, migrateCmd)
+	rootCmd.AddCommand(httpCmd, eventCmd, migrateCmd, seedCmd)
 }

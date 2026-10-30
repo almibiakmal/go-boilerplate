@@ -24,7 +24,7 @@ type App struct {
 	http *fiber.App
 }
 
-// New menginisialisasi koneksi database, repository, service, handler, middleware, dan router.
+// New menginisialisasi koneksi database, transaction manager, repository, service, handler, middleware, dan router.
 func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	db, err := database.New(ctx, cfg.Database)
 	if err != nil {
@@ -44,18 +44,28 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	// Register global middlewares (RequestID, Recover, CORS, Logger, RateLimiter)
 	middleware.Setup(fiberApp, cfg)
 
-	// Wiring 3-Tier Dependencies: Repository -> Service -> Handler
-	productRepo := repository.NewProductRepository(db)
-	productSvc := service.NewProductService(productRepo)
+	// Wiring 3-Tier Dependencies: TxManager & Repositories -> Services -> Handlers
+	txManager := database.NewTxManager(db)
+	userRepo := repository.NewUserRepository(db)
+	postRepo := repository.NewPostRepository(db)
+	commentRepo := repository.NewCommentRepository(db)
+
+	authSvc := service.NewAuthService(userRepo, cfg.Auth)
+	postSvc := service.NewPostService(txManager, postRepo, commentRepo)
+	commentSvc := service.NewCommentService(txManager, postRepo, commentRepo)
 
 	healthHandler := handler.NewHealthHandler(db)
-	productHandler := handler.NewProductHandler(productSvc)
+	authHandler := handler.NewAuthHandler(authSvc)
+	postHandler := handler.NewPostHandler(postSvc)
+	commentHandler := handler.NewCommentHandler(commentSvc)
 
 	// Register HTTP Routes
 	router.RegisterHTTP(fiberApp, router.Dependencies{
 		Config:         cfg,
 		HealthHandler:  healthHandler,
-		ProductHandler: productHandler,
+		AuthHandler:    authHandler,
+		PostHandler:    postHandler,
+		CommentHandler: commentHandler,
 	})
 
 	return &App{

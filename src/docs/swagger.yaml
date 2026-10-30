@@ -1,33 +1,85 @@
 basePath: /
 definitions:
-  requestdto.CreateProductRequest:
+  requestdto.CreateCommentRequest:
     properties:
-      name:
-        maxLength: 150
-        minLength: 2
-        type: string
-      price:
-        minimum: 0
-        type: integer
-      sku:
-        maxLength: 64
+      content:
+        maxLength: 2000
         minLength: 2
         type: string
     required:
-    - name
-    - sku
+    - content
     type: object
-  requestdto.UpdateProductRequest:
+  requestdto.CreatePostRequest:
     properties:
-      name:
+      content:
+        minLength: 10
+        type: string
+      is_published:
+        type: boolean
+      title:
+        maxLength: 200
+        minLength: 3
+        type: string
+    required:
+    - content
+    - title
+    type: object
+  requestdto.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  requestdto.RegisterRequest:
+    properties:
+      email:
         maxLength: 150
+        type: string
+      name:
+        maxLength: 100
         minLength: 2
         type: string
-      price:
-        minimum: 0
-        type: integer
+      password:
+        maxLength: 72
+        minLength: 6
+        type: string
+      role:
+        enum:
+        - user
+        - admin
+        type: string
     required:
+    - email
     - name
+    - password
+    type: object
+  requestdto.UpdateCommentRequest:
+    properties:
+      content:
+        maxLength: 2000
+        minLength: 2
+        type: string
+    required:
+    - content
+    type: object
+  requestdto.UpdatePostRequest:
+    properties:
+      content:
+        minLength: 10
+        type: string
+      is_published:
+        type: boolean
+      title:
+        maxLength: 200
+        minLength: 3
+        type: string
+    required:
+    - content
+    - title
     type: object
   response.Code:
     enum:
@@ -100,19 +152,75 @@ definitions:
       total_pages:
         type: integer
     type: object
-  responsedto.ProductResponse:
+  responsedto.AuthResponse:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        type: integer
+      token_type:
+        type: string
+      user:
+        $ref: '#/definitions/responsedto.UserResponse'
+    type: object
+  responsedto.AuthorSummary:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+  responsedto.CommentResponse:
+    properties:
+      author:
+        $ref: '#/definitions/responsedto.AuthorSummary'
+      author_id:
+        type: integer
+      content:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      post_id:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  responsedto.PostResponse:
+    properties:
+      author:
+        $ref: '#/definitions/responsedto.AuthorSummary'
+      author_id:
+        type: integer
+      comments_count:
+        type: integer
+      content:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      is_published:
+        type: boolean
+      slug:
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  responsedto.UserResponse:
     properties:
       created_at:
+        type: string
+      email:
         type: string
       id:
         type: integer
       name:
         type: string
-      price:
-        type: integer
-      sku:
-        type: string
-      updated_at:
+      role:
         type: string
     type: object
 info:
@@ -121,22 +229,19 @@ info:
   title: Majoo Core Service API
   version: "1.0"
 paths:
-  /api/v1/products:
-    get:
-      description: Mengambil daftar produk dengan filter pencarian dan pagination
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Autentikasi user dengan email dan password untuk mendapatkan JWT
+        access token
       parameters:
-      - description: 'Page number (default: 1)'
-        in: query
-        name: page
-        type: integer
-      - description: 'Items per page (default: 10, max: 100)'
-        in: query
-        name: per_page
-        type: integer
-      - description: Search by name or SKU
-        in: query
-        name: search
-        type: string
+      - description: Login Payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/requestdto.LoginRequest'
       produces:
       - application/json
       responses:
@@ -147,28 +252,64 @@ paths:
             - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  items:
-                    $ref: '#/definitions/responsedto.ProductResponse'
-                  type: array
+                  $ref: '#/definitions/responsedto.AuthResponse'
               type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
         "422":
           description: Unprocessable Entity
           schema:
             $ref: '#/definitions/response.Envelope'
-      summary: List Products
+      summary: Login User
       tags:
-      - Products
+      - Auth
+  /api/v1/auth/me:
+    get:
+      description: Mengambil data profil user yang sedang login berdasarkan Bearer
+        JWT token
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/responsedto.UserResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Get Current User Profile
+      tags:
+      - Auth
+  /api/v1/auth/register:
     post:
       consumes:
       - application/json
-      description: Membuat data produk baru
+      description: Mendaftarkan akun user baru dan mengembalikan JWT access token
       parameters:
-      - description: Create Product Payload
+      - description: Register Payload
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/requestdto.CreateProductRequest'
+          $ref: '#/definitions/requestdto.RegisterRequest'
       produces:
       - application/json
       responses:
@@ -179,7 +320,7 @@ paths:
             - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/responsedto.ProductResponse'
+                  $ref: '#/definitions/responsedto.AuthResponse'
               type: object
         "400":
           description: Bad Request
@@ -193,14 +334,15 @@ paths:
           description: Unprocessable Entity
           schema:
             $ref: '#/definitions/response.Envelope'
-      summary: Create Product
+      summary: Register User
       tags:
-      - Products
-  /api/v1/products/{id}:
+      - Auth
+  /api/v1/comments/{id}:
     delete:
-      description: Menghapus satu produk berdasarkan ID
+      description: Menghapus komentar (diizinkan untuk pembuat komentar atau role
+        admin)
       parameters:
-      - description: Product ID
+      - description: Comment ID
         in: path
         name: id
         required: true
@@ -216,17 +358,200 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
         "404":
           description: Not Found
           schema:
             $ref: '#/definitions/response.Envelope'
-      summary: Delete Product
+      security:
+      - BearerAuth: []
+      summary: Delete Comment
       tags:
-      - Products
-    get:
-      description: Mengambil detail satu produk berdasarkan ID
+      - Comments
+    put:
+      consumes:
+      - application/json
+      description: Memperbarui isi komentar (hanya pembuat komentar yang diizinkan)
       parameters:
-      - description: Product ID
+      - description: Comment ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update Comment Payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/requestdto.UpdateCommentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/responsedto.CommentResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Update Comment
+      tags:
+      - Comments
+  /api/v1/posts:
+    get:
+      description: Mengambil daftar artikel blog dengan filter pencarian, author_id,
+        dan pagination
+      parameters:
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Items per page (default: 10, max: 100)'
+        in: query
+        name: per_page
+        type: integer
+      - description: Search by title or content
+        in: query
+        name: search
+        type: string
+      - description: Filter by Author ID
+        in: query
+        name: author_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/responsedto.PostResponse'
+                  type: array
+              type: object
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      summary: List Posts
+      tags:
+      - Posts
+    post:
+      consumes:
+      - application/json
+      description: Membuat artikel blog baru (wajib login Bearer token)
+      parameters:
+      - description: Create Post Payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/requestdto.CreatePostRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/responsedto.PostResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Create Post
+      tags:
+      - Posts
+  /api/v1/posts/{id}:
+    delete:
+      description: Menghapus artikel blog beserta komentarnya (diizinkan untuk pemilik
+        post atau role admin)
+      parameters:
+      - description: Post ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Delete Post
+      tags:
+      - Posts
+    get:
+      description: Mengambil detail satu artikel blog beserta informasi author
+      parameters:
+      - description: Post ID
         in: path
         name: id
         required: true
@@ -241,7 +566,7 @@ paths:
             - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/responsedto.ProductResponse'
+                  $ref: '#/definitions/responsedto.PostResponse'
               type: object
         "400":
           description: Bad Request
@@ -251,25 +576,25 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/response.Envelope'
-      summary: Get Product by ID
+      summary: Get Post by ID
       tags:
-      - Products
+      - Posts
     put:
       consumes:
       - application/json
-      description: Memperbarui nama dan harga produk berdasarkan ID
+      description: Memperbarui artikel blog (hanya pemilik post yang diizinkan)
       parameters:
-      - description: Product ID
+      - description: Post ID
         in: path
         name: id
         required: true
         type: integer
-      - description: Update Product Payload
+      - description: Update Post Payload
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/requestdto.UpdateProductRequest'
+          $ref: '#/definitions/requestdto.UpdatePostRequest'
       produces:
       - application/json
       responses:
@@ -280,7 +605,63 @@ paths:
             - $ref: '#/definitions/response.Envelope'
             - properties:
                 data:
-                  $ref: '#/definitions/responsedto.ProductResponse'
+                  $ref: '#/definitions/responsedto.PostResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Update Post
+      tags:
+      - Posts
+  /api/v1/posts/{postId}/comments:
+    get:
+      description: Mengambil daftar komentar pada suatu artikel blog dengan pagination
+      parameters:
+      - description: Post ID
+        in: path
+        name: postId
+        required: true
+        type: integer
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Items per page (default: 10, max: 100)'
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/responsedto.CommentResponse'
+                  type: array
               type: object
         "400":
           description: Bad Request
@@ -294,9 +675,59 @@ paths:
           description: Unprocessable Entity
           schema:
             $ref: '#/definitions/response.Envelope'
-      summary: Update Product
+      summary: List Comments by Post ID
       tags:
-      - Products
+      - Comments
+    post:
+      consumes:
+      - application/json
+      description: Menambahkan komentar baru pada post dan menambah counter comments_count
+        dalam satu transaksi DB
+      parameters:
+      - description: Post ID
+        in: path
+        name: postId
+        required: true
+        type: integer
+      - description: Create Comment Payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/requestdto.CreateCommentRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.Envelope'
+            - properties:
+                data:
+                  $ref: '#/definitions/responsedto.CommentResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.Envelope'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/response.Envelope'
+      security:
+      - BearerAuth: []
+      summary: Create Comment on Post
+      tags:
+      - Comments
   /healthz:
     get:
       description: Memeriksa apakah proses HTTP server masih hidup

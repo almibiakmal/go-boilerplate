@@ -14,41 +14,67 @@ import (
 type Dependencies struct {
 	Config         *config.Config
 	HealthHandler  *handler.HealthHandler
-	ProductHandler *handler.ProductHandler
+	AuthHandler    *handler.AuthHandler
+	PostHandler    *handler.PostHandler
+	CommentHandler *handler.CommentHandler
 }
 
-// RegisterHTTP mendaftarkan seluruh route REST API ke dalam instance Fiber.
+// RegisterHTTP mendaftarkan seluruh route REST API untuk Simple Blog System ke dalam instance Fiber.
 func RegisterHTTP(app *fiber.App, deps Dependencies) {
 	// Swagger UI documentation (/swagger/index.html)
 	app.Get("/swagger/*", swagger.HandlerDefault)
 
 	// Probe endpoints (Kubernetes / Docker healthcheck)
-	app.Get("/healthz", deps.HealthHandler.Liveness)
-	app.Get("/readyz", deps.HealthHandler.Readiness)
+	if deps.HealthHandler != nil {
+		app.Get("/healthz", deps.HealthHandler.Liveness)
+		app.Get("/readyz", deps.HealthHandler.Readiness)
+	}
 
-	// Public / Standard API v1 group
+	jwtSecret := "change-me-in-production"
+	internalAPIKey := "internal-dev-key"
+	if deps.Config != nil {
+		jwtSecret = deps.Config.Auth.JWTSecret
+		internalAPIKey = deps.Config.Auth.InternalAPIKey
+	}
+	jwtMiddleware := middleware.JWTAuth(jwtSecret)
+
+	// API v1 group
 	v1 := app.Group("/api/v1")
 
-	// Sample resource: Products
-	products := v1.Group("/products")
-	products.Get("/", deps.ProductHandler.List)
-	products.Post("/", deps.ProductHandler.Create)
-	products.Get("/:id", deps.ProductHandler.GetByID)
-	products.Put("/:id", deps.ProductHandler.Update)
-	products.Delete("/:id", deps.ProductHandler.Delete)
+	// 1. Auth Routes
+	if deps.AuthHandler != nil {
+		auth := v1.Group("/auth")
+		auth.Post("/register", deps.AuthHandler.Register)
+		auth.Post("/login", deps.AuthHandler.Login)
+		auth.Get("/me", jwtMiddleware, deps.AuthHandler.Me)
+	}
 
-	// Contoh route group yang diproteksi JWT Bearer Token & Internal API Key
-	if deps.Config != nil {
-		// Group untuk endpoint yang wajib login (Bearer Token)
-		protectedV1 := v1.Group("/me", middleware.JWTAuth(deps.Config.Auth.JWTSecret))
-		protectedV1.Get("/", func(c *fiber.Ctx) error {
-			claims, _ := middleware.GetAuthClaims(c)
-			return response.OK(c, "Authenticated user profile", claims)
-		})
+	// 2. Posts & Post Comments Routes
+	if deps.PostHandler != nil {
+		posts := v1.Group("/posts")
+		posts.Get("/", deps.PostHandler.List)
+		posts.Get("/:id", deps.PostHandler.GetByID)
+		posts.Post("/", jwtMiddleware, deps.PostHandler.Create)
+		posts.Put("/:id", jwtMiddleware, deps.PostHandler.Update)
+		posts.Delete("/:id", jwtMiddleware, deps.PostHandler.Delete)
 
-		// Group untuk komunikasi internal antar-microservice (X-API-Key)
-		internalV1 := app.Group("/internal/v1", middleware.APIKeyAuth(deps.Config.Auth.InternalAPIKey))
-		internalV1.Get("/products/:id", deps.ProductHandler.GetByID)
+		if deps.CommentHandler != nil {
+			posts.Get("/:postId/comments", deps.CommentHandler.ListByPostID)
+			posts.Post("/:postId/comments", jwtMiddleware, deps.CommentHandler.Create)
+		}
+	}
+
+	// 3. Direct Comment Routes (Update & Delete by Comment ID)
+	if deps.CommentHandler != nil {
+		comments := v1.Group("/comments", jwtMiddleware)
+		comments.Put("/:id", deps.CommentHandler.Update)
+		comments.Delete("/:id", deps.CommentHandler.Delete)
+	}
+
+	// 4. Internal Service-to-Service Routes (X-API-Key)
+	if deps.PostHandler != nil {
+		internalV1 := app.Group("/internal/v1", middleware.APIKeyAuth(internalAPIKey))
+		internalV1.Get("/posts/:id", deps.PostHandler.GetByID)
 	}
 
 	// Fallback 404 Route

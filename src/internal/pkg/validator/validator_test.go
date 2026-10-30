@@ -13,10 +13,10 @@ import (
 )
 
 func TestValidateStruct_Success(t *testing.T) {
-	req := requestdto.CreateProductRequest{
-		SKU:   "SKU-001",
-		Name:  "Kopi Susu Aren",
-		Price: 18000,
+	req := requestdto.RegisterRequest{
+		Name:     "Budi Santoso",
+		Email:    "budi@example.com",
+		Password: "secretpassword",
 	}
 
 	err := validator.ValidateStruct(req)
@@ -24,10 +24,10 @@ func TestValidateStruct_Success(t *testing.T) {
 }
 
 func TestValidateStruct_ValidationErrors(t *testing.T) {
-	req := requestdto.CreateProductRequest{
-		SKU:   "",
-		Name:  "A",
-		Price: -500,
+	req := requestdto.RegisterRequest{
+		Name:     "B",
+		Email:    "not-an-email",
+		Password: "123",
 	}
 
 	err := validator.ValidateStruct(req)
@@ -43,8 +43,7 @@ func TestValidateStruct_ValidationErrors(t *testing.T) {
 		fields[d.Field] = d.Message
 	}
 
-	assert.Contains(t, fields["sku"], "sku is required")
 	assert.Contains(t, fields["name"], "name must be at least 2 characters")
-	assert.Contains(t, fields["price"], "price must be greater than or equal to 0")
+	assert.Contains(t, fields["email"], "email must be a valid email address")
+	assert.Contains(t, fields["password"], "password must be at least 6 characters")
 }
-

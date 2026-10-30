@@ -22,7 +22,7 @@ Boilerplate microservice **Golang** berstandar *production* untuk kebutuhan **RE
 
 ```text
 maj-core-srvc/
-├── migrations/                              # File SQL migrasi (.up.sql & .down.sql)
+├── migrations/                              # File SQL migrasi tunggal (.sql berisi -- +migrate Up & Down)
 ├── src/
 │   ├── main.go                              # Entrypoint aplikasi & anotasi global Swagger
 │   ├── cmd/                                 # Definisi CLI Cobra
@@ -108,7 +108,7 @@ make migrate-up
 # Mengecek versi migrasi saat ini
 make migrate-version
 
-# Membuat file migrasi baru (.up.sql & .down.sql)
+# Membuat 1 file migrasi .sql baru (berisi blok -- +migrate Up & -- +migrate Down)
 make migrate-create name=add_orders_table
 
 # Rollback 1 langkah migrasi
@@ -128,6 +128,23 @@ Setelah server berjalan:
 - **Swagger UI**: `http://localhost:8080/swagger/index.html`
 - **Liveness Probe**: `GET http://localhost:8080/healthz`
 - **Readiness & DB Pool Stats**: `GET http://localhost:8080/readyz`
+
+### Daftar Endpoint Simple Blog System (`/api/v1`)
+
+| Method | Endpoint | Auth | Deskripsi |
+| :---: | :--- | :---: | :--- |
+| `POST` | `/api/v1/auth/register` | Public | Registrasi user baru (`user` / `admin`) & dapatkan JWT token |
+| `POST` | `/api/v1/auth/login` | Public | Login dengan email & password untuk mendapatkan JWT token |
+| `GET` | `/api/v1/auth/me` | Bearer JWT | Ambil profil user yang sedang login |
+| `GET` | `/api/v1/posts` | Public | Daftar post dengan pagination, pencarian, & filter `author_id` |
+| `GET` | `/api/v1/posts/:id` | Public | Detail satu post beserta info author |
+| `POST` | `/api/v1/posts` | Bearer JWT | Buat post baru |
+| `PUT` | `/api/v1/posts/:id` | Bearer JWT | Update post (hanya pemilik post) |
+| `DELETE` | `/api/v1/posts/:id` | Bearer JWT | Hapus post + seluruh komentarnya dalam 1 transaksi DB (pemilik / `admin`) |
+| `GET` | `/api/v1/posts/:postId/comments` | Public | Daftar komentar pada sebuah post dengan pagination |
+| `POST` | `/api/v1/posts/:postId/comments` | Bearer JWT | Tambah komentar + increment `comments_count` dalam 1 transaksi DB |
+| `PUT` | `/api/v1/comments/:id` | Bearer JWT | Update isi komentar (hanya pembuat komentar) |
+| `DELETE` | `/api/v1/comments/:id` | Bearer JWT | Hapus komentar + decrement `comments_count` dalam 1 transaksi DB (pemilik / `admin`) |
 
 ---
 

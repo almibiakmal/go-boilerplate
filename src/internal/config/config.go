@@ -36,6 +36,7 @@ type HTTPConfig struct {
 type AuthConfig struct {
 	JWTSecret      string
 	JWTIssuer      string
+	JWTExpiration  time.Duration
 	InternalAPIKey string
 }
 
@@ -87,6 +88,7 @@ func Load() (*Config, error) {
 		Auth: AuthConfig{
 			JWTSecret:      getEnv("AUTH_JWT_SECRET", "change-me-in-production"),
 			JWTIssuer:      getEnv("AUTH_JWT_ISSUER", "maj-core-srvc"),
+			JWTExpiration:  getEnvAsDuration("AUTH_JWT_EXPIRATION", 24*time.Hour),
 			InternalAPIKey: getEnv("AUTH_INTERNAL_API_KEY", "internal-dev-key"),
 		},
 		RateLimit: RateLimitConfig{
@@ -137,7 +139,7 @@ func buildDatabaseURL(db DatabaseConfig) (string, error) {
 		), nil
 	case "mysql":
 		return fmt.Sprintf(
-			"%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+			"%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local&multiStatements=true",
 			db.User, db.Password, db.Host, db.Port, db.Name,
 		), nil
 	case "sqlite", "sqlite3":
