@@ -1,6 +1,6 @@
-# Simple Blog System REST API (`maj-core-srvc`)
+# Service Boilerplate
 
-Production-grade **Golang** microservice implementing a **Simple Blog System REST API** with JWT authentication, strict Anti-IDOR ownership authorization, posts & comments CRUD with soft-delete, standardized validation/error responses, per-table SQL migrations, database seeding, and atomic database transactions.
+Production-grade **Golang Microservice Boilerplate** designed for building scalable **RESTful API** and **Event-Driven** services. Built with a strict 3-Tier decoupled architecture, JWT & API-Key authentication, Anti-IDOR authorization patterns, standardized validation/error responses, single-file SQL migrations, transactional database seeding, and context-propagated database transactions (featuring a built-in Blog API module as a reference implementation).
 
 ---
 
@@ -58,13 +58,6 @@ make seed
 # or: go run ./src seed
 ```
 
-Default seeded accounts (all use password `password123`):
-| Email | Name | Role |
-| :--- | :--- | :--- |
-| `admin@majoo.id` | Admin Majoo | `admin` |
-| `budi@majoo.id` | Budi Santoso | `user` |
-| `siti@majoo.id` | Siti Aminah | `user` |
-
 ### Step 4: Start the HTTP Server
 ```bash
 make run-http
@@ -76,7 +69,9 @@ Once the server is running:
 - **Liveness Probe**: `GET http://localhost:8080/healthz`
 - **Readiness & DB Connection Pool Stats**: `GET http://localhost:8080/readyz`
 
-### API Endpoints Summary (`/api/v1`)
+### Sample Endpoints Reference (`/api/v1`)
+
+As a reference implementation, the boilerplate includes a complete **Blog System** module (`Auth`, `Posts`, and `Comments`) demonstrating authentication, pagination, ownership authorization, and multi-repository database transactions:
 
 | Method | Endpoint | Auth | Description |
 | :---: | :--- | :---: | :--- |
@@ -101,7 +96,7 @@ Once the server is running:
 This service uses a **Strict 3-Tier Decoupled Architecture** (`Handler` -> `Service` -> `Repository`) with isolated DTO contracts per layer so that HTTP transport details never leak into business logic and GORM database models never leak directly into JSON responses.
 
 ```text
-maj-core-srvc/
+go-boilerplate-srvc/
 ├── migrations/                              # Per-table single-file SQL migrations (-- +migrate Up & Down)
 ├── src/
 │   ├── main.go                              # Application entrypoint & global OpenAPI annotations
@@ -135,7 +130,7 @@ maj-core-srvc/
 
 ### Data Flow & Layer Boundaries
 
-```mermaid
+```
 flowchart LR
     Client["HTTP Client"] -->|JSON / Query| ReqDTO["dto/request"]
     ReqDTO -->|.ToServiceInput()| SvcDTO["dto/service"]
