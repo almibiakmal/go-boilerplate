@@ -153,50 +153,50 @@ Event tidak digunakan untuk menggantikan seluruh komunikasi synchronous. Request
 
 ```mermaid
 flowchart TB
-    CLIENT[Web / Mobile Client]
-    CDN[CDN / WAF]
-    LB[Cloud Load Balancer]
-    GW[API Gateway]
+    CLIENT["Web / Mobile Client"]
+    CDN["CDN / WAF"]
+    LB["Cloud Load Balancer"]
+    GW["API Gateway"]
 
     CLIENT --> CDN
     CDN --> LB
     LB --> GW
 
-    GW --> ID[Identity Service]
-    GW --> CAT[Catalog Service]
-    GW --> CART[Cart Service]
-    GW --> ORD[Order Service]
-    GW --> INV[Inventory Service]
-    GW --> PAY[Payment Service]
-    GW --> SEARCH[Search Service]
-    GW --> REC[Recommendation Service]
-    GW --> SHIP[Shipping Service]
+    GW --> IDENT["Identity Service"]
+    GW --> CAT["Catalog Service"]
+    GW --> CART["Cart Service"]
+    GW --> ORD["Order Service"]
+    GW --> INV["Inventory Service"]
+    GW --> PAY["Payment Service"]
+    GW --> SEARCH["Search Service"]
+    GW --> REC["Recommendation Service"]
+    GW --> SHIP["Shipping Service"]
 
-    ID --> IDDB[(Identity DB)]
-    CAT --> CATDB[(Catalog DB)]
-    CART --> REDIS[(Redis)]
-    ORD --> ORDDB[(Order DB)]
-    INV --> INVDB[(Inventory DB)]
-    PAY --> PAYDB[(Payment DB)]
-    SHIP --> SHIPDB[(Shipping DB)]
+    IDENT --> IDDB[("Identity DB")]
+    CAT --> CATDB[("Catalog DB")]
+    CART --> REDIS[("Redis")]
+    ORD --> ORDDB[("Order DB")]
+    INV --> INVDB[("Inventory DB")]
+    PAY --> PAYDB[("Payment DB")]
+    SHIP --> SHIPDB[("Shipping DB")]
 
-    CAT --> KAFKA[Kafka]
+    CAT --> KAFKA["Kafka"]
     ORD --> KAFKA
     INV --> KAFKA
     PAY --> KAFKA
     SHIP --> KAFKA
 
-    KAFKA --> NOTIF[Notification Service]
+    KAFKA --> NOTIF["Notification Service"]
     KAFKA --> SEARCH
     KAFKA --> REC
 
-    SEARCH --> OS[(OpenSearch)]
+    SEARCH --> OS[("OpenSearch")]
     REC --> REDIS
 
-    PAY --> ADAPTER[Payment Gateway Adapters]
-    ADAPTER --> PG1[Gateway A]
-    ADAPTER --> PG2[Gateway B]
-    ADAPTER --> PG3[Gateway C]
+    PAY --> ADAPTER["Payment Gateway Adapters"]
+    ADAPTER --> PG1["Gateway A"]
+    ADAPTER --> PG2["Gateway B"]
+    ADAPTER --> PG3["Gateway C"]
 ```
 
 Diagram ini menggambarkan batas layanan dan aliran komunikasi secara logical. Detail jaringan, deployment, dan topologi database dijelaskan pada bagian infrastruktur.
@@ -891,8 +891,8 @@ flowchart TD
     E --> F[Kafka]
     F --> G{Order Service Available?}
 
-    G -->|No| H[Event Remains Unprocessed]
-    H --> I[Consumer Recovery / Retry]
+    G -->|No| H["Event Remains Unprocessed"]
+    H --> I["Consumer Recovery / Retry"]
     I --> G
 
     G -->|Yes| J[Consume Event]
@@ -1223,22 +1223,22 @@ Gunakan k6 atau Gatling. Hasil pengujian harus mencatat throughput, latency perc
 
 ```mermaid
 flowchart TB
-    USER[Users]
-    EDGE[CDN / WAF]
-    LB[Cloud Load Balancer]
-    GW[API Gateway]
+    USER["Users"]
+    EDGE["CDN / WAF"]
+    LB["Cloud Load Balancer"]
+    GW["API Gateway"]
 
-    subgraph K8S[Kubernetes Cluster]
-        ING[Ingress]
-        API[Application Services]
-        WORKERS[Background Workers]
+    subgraph K8S["Kubernetes Cluster"]
+        ING["Ingress"]
+        API["Application Services"]
+        WORKERS["Background Workers"]
     end
 
-    subgraph DATA[Data Layer]
-        PG[(PostgreSQL)]
-        REDIS[(Redis)]
-        KAFKA[(Kafka)]
-        OS[(OpenSearch)]
+    subgraph DATA["Data Layer"]
+        PG[("PostgreSQL")]
+        REDIS[("Redis")]
+        KAFKA[("Kafka")]
+        OS[("OpenSearch")]
     end
 
     USER --> EDGE
