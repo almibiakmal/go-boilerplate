@@ -1,7 +1,7 @@
 .PHONY: run-http run-event migrate-up migrate-down migrate-version migrate-force migrate-create seed swagger test test-cover build
 
 run-http:        ; go run ./src http serve
-run-event:       ; go run ./src event serve
+run-event:       ; go run ./src event servehttps://github.com/almibiakmal/go-boilerplate
 migrate-up:      ; go run ./src migrate up
 migrate-down:    ; go run ./src migrate down
 migrate-version: ; go run ./src migrate version

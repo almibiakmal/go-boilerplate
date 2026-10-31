@@ -11,6 +11,7 @@ Production-grade **Golang Microservice Boilerplate** designed for building scala
 3. [Technology Choices Justification](#3-technology-choices-justification)
 4. [Known Limitations and Future Improvements](#4-known-limitations-and-future-improvements)
 5. [Test Coverage Report](#5-test-coverage-report)
+6. [CI/CD Workflow (Development, Staging, Production)](#6-cicd-workflow-development-staging-production)
 
 ---
 
@@ -208,3 +209,52 @@ make test-cover
 | `src/internal/middleware` | **57.5%** | `JWTAuth` token parsing & expiry, `RequireRoles` RBAC, `APIKeyAuth`, and IP `RateLimiter` (`429`) |
 | `src/internal/infra/database` | **51.7%** | Single-file `-- +migrate Up/Down` parser, per-table migration ordering, and idempotent transactional `Seed()` |
 | `src/internal/infra/logger` | **16.7%** | Automatic `request_id` and `user_id` extraction from `context.Context` into structured `slog` records |
+
+---
+
+## 6. CI/CD Workflow (Development, Staging, Production)
+
+Automated CI/CD pipelines are separated into dedicated workflow files per environment under `.github/workflows/`:
+- **Development**: [`.github/workflows/development.yml`](.github/workflows/development.yml) (branch `development`)
+- **Staging**: [`.github/workflows/staging.yml`](.github/workflows/staging.yml) (branch `staging`)
+- **Production**: [`.github/workflows/production.yml`](.github/workflows/production.yml) (branch `main` & tags `v*.*.*`)
+
+### Pipeline Flow
+
+```
+[Pull Request / Push per Environment Branch]
+        │
+        ▼
+┌──────────────────────────────────────────────────────────┐
+│ 1. CI: Quality Gate, Test & Build                        │
+│    • go mod verify & go vet ./...                        │
+│    • make test (Unit & Integration Tests)                │
+│    • make test-cover (Statement Coverage Check)          │
+│    • make build (Compile Binary Verification)            │
+└───────────────────────────┬──────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────┐
+│ 2. Package: Multi-Stage Docker Build & Push              │
+│    • Builds Alpine non-root image via Dockerfile         │
+│    • Pushes tagged image (dev-<sha>, staging-<sha>, v*)  │
+└─────────────┬───────────────────────────┬────────────────┘
+              │                           │
+              ▼                           ▼
+┌───────────────────────────┐ ┌────────────────────────────┐ ┌────────────────────────────┐
+│ development.yml           │ │ staging.yml                │ │ production.yml             │
+│ • Trigger: development    │ │ • Trigger: branch staging  │ │ • Trigger: main / tag v*   │
+│ • Auto-run: migrate up    │ │ • Auto-run: migrate up     │ │ • Manual Approval Gate     │
+│ • Auto-run: seed          │ │ • No seeder (QA dataset)   │ │ • Auto-run: migrate up     │
+│ • Deploy & verify /readyz │ │ • Deploy & verify /readyz  │ │ • Zero-downtime rollout    │
+└───────────────────────────┘ └────────────────────────────┘ └────────────────────────────┘
+```
+
+### Environment Promotion Strategy
+
+| Environment | Workflow File | Branch / Trigger | Database Migration & Seeding | Deployment & Approval Policy |
+| :--- | :--- | :--- | :--- | :--- |
+| **Development** | `.github/workflows/development.yml` | Push / PR to `development` | Runs `./app migrate up` + `./app seed` automatically | Automatic deployment on every merged feature PR for rapid integration testing. |
+| **Staging** | `.github/workflows/staging.yml` | Push / PR to `staging` | Runs `./app migrate up` only (seeder disabled) | Automatic deployment mirroring production config (`APP_ENV=staging`) for QA & UAT sign-off. |
+| **Production** | `.github/workflows/production.yml` | Push / PR to `main` or tag `v*.*.*` | Runs `./app migrate up` only (seeder strictly disabled) | Protected by GitHub Environment **Manual Approval Gate**, followed by zero-downtime rolling update and `/healthz` + `/readyz` verification. |
+
